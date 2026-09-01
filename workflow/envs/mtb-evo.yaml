@@ -11,6 +11,8 @@ dependencies:
   - samtools
   - varscan
   - fasttree
+  # Pairwise SNP distance calculator; the workflow passes threads from YAML.
+  - snp-dists
   - perl
   - snakemake-minimal
   - pip:

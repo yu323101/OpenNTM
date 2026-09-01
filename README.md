@@ -177,3 +177,35 @@ snakemake --snakefile Snakefile --configfile config/config.yaml -n all --config 
 
 1. 补充回归测试（图表/表格口径一致性）。
 2. 继续细化 core 规则并增强失败诊断日志。
+
+## 11. 两两 SNP 距离实现更新
+
+核心 alignment 的两两距离现在由 `snp-dists` 计算，以替代原来的 Python
+逐字符双重循环。`snp-dists` 使用 C/OpenMP 实现，适合常规二代测序分析中对较多
+样本进行距离计算；距离口径保持不变：只比较 `A/C/G/T`，忽略 `N`、`?`、gap
+以及其他非标准字符，不使用 `-a`，也不做进化模型校正。
+
+默认使用单线程，避免在共享计算节点上意外占用过多资源。线程数在
+`config/config.yaml` 的 `threads.distance` 中修改，例如：
+
+```yaml
+threads:
+  # snp-dists threads; default 1
+  distance: 4
+```
+
+该参数是 `snp-dists` 的线程数；Snakemake 命令行的 `-j` 仍然控制可并行运行的
+任务数。流程内部调用 `snp-dists -q -k -L -m -t -j N`，只计算唯一的样本对，
+并将其结果转换回旧的
+上三角三列格式：
+
+```text
+sample_1<TAB>sample_2<TAB>distance
+```
+
+因此现有 `results/core/distance_matrix.txt` 和读取该文件的下游接口保持兼容。
+前置 alignment 构建、PPE/高变异位点屏蔽和 missing 过滤逻辑没有改变。
+
+这里的距离结果用于常规 NGS 数据分析和潜在基因组近缘簇的筛查/预防支持，不是
+临床诊断或传播认定；本次更新不引入 TB 专用距离阈值，也不产生临床结论。任何
+聚类阈值都应结合研究对象、采样背景和流行病学资料单独解释。

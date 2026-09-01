@@ -13,6 +13,8 @@ dependencies:
   - varscan
   - fasttree
   - fastp
+  # C/OpenMP implementation used for fast pairwise SNP distances.
+  - snp-dists
   # Perl
   - perl
   - snakemake-minimal

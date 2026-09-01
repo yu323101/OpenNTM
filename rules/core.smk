@@ -345,7 +345,11 @@ rule core_compute_distance:
         r'''
         set -euo pipefail
         mkdir -p "$(dirname {log})" "$(dirname {output.distance})"
-        {params.python_bin} -m {params.cli_module} distance --alignment {input.core_fa} --output {output.distance} > {log} 2>&1
+        {params.python_bin} -m {params.cli_module} distance \
+            --alignment {input.core_fa} \
+            --output {output.distance} \
+            --threads {threads} \
+            > {log} 2>&1
         '''
 
 

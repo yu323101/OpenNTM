@@ -14,6 +14,8 @@ threads:
   merge: 1
   wild_extract: 1
   filter_core: 1
+  # Threads passed to snp-dists for pairwise SNP distances. Default is 1;
+  # increase this value (for example, to 4 or 8) when more CPU is available.
   distance: 1
 
 workflow:
