@@ -1,6 +1,9 @@
 # mtb-evo
 
-`mtb-evo` 是一个基于 Snakemake 的结核分枝杆菌分析流程，输入样本 `FASTQ`，输出样本级图表与表格，以及全样本共享 `core` 结果。
+`mtb-evo` 是一个基于 Snakemake 的分枝杆菌 WGS/NGS 分析流程，默认配置面向
+MTB/TB；输入样本 `FASTQ`，输出样本级图表与表格，以及全样本共享 `core` 结果。
+研究 NTM 时必须使用匹配的参考序列、注释资源和阈值；仓库内置的 TB 专用资源
+不能直接解释 NTM。
 
 ## 1. 当前流程（唯一主流程）
 
@@ -62,6 +65,7 @@ results/
 │       │   └── annotated_variants/
 │       ├── figure/
 │       └── table/
+│           └── <sample>_drug_resistance.tsv
 └── logs/
     ├── rules/
     ├── workflow/
@@ -70,7 +74,9 @@ results/
     ├── prepare_downstream_inputs_status.tsv
     ├── lineage_summary.tsv
     ├── report_figures_status.tsv
-    └── report_tables_status.tsv
+    ├── report_tables_status.tsv
+    ├── drug_resistance_manifest.tsv
+    └── investigation_alerts.tsv
 ```
 
 说明：
@@ -177,6 +183,40 @@ snakemake --snakefile Snakefile --configfile config/config.yaml -n all --config 
 
 1. 补充回归测试（图表/表格口径一致性）。
 2. 继续细化 core 规则并增强失败诊断日志。
+
+## 10. 流行病防控支持扩展
+
+`all` 在核心距离和样本注释准备完成后，会额外生成：
+
+- `results/core/cluster_assignments.tsv`：按 `clustering.snp_threshold` 将样本构建为基因组近缘性连通簇。
+- `results/logs/drug_resistance_manifest.tsv`：将已知耐药突变标记映射到样本，并按 WHO MDR/pre-XDR/XDR 规则分级。
+- `results/logs/investigation_alerts.tsv`：生成近缘簇和耐药风险的可解释流调跟进提示。
+
+这些模块用于疾病预防控制中的筛查、风险分层和人工流调分流。近缘簇是距离图的
+连通分量，不是已证实的传播链；必须结合采样时间、地点、接触史和其他流调资料。
+耐药模块使用仓库内置的 MTB/TB 专用数据库，只输出基因型标记筛查结果；它不适用
+于 NTM，也不能替代表型药敏（DST）、临床资料或治疗决策。NTM 样本可以在参考序列
+和变异定义合适时使用通用聚类模块，但仍需使用 NTM 适用的数据库/阈值并结合流调。
+
+也可以单独使用：
+
+```bash
+python -m src.cli cluster --distance-matrix results/core/distance_matrix.txt \
+  --output results/core/cluster_assignments.tsv --threshold 12
+python -m src.cli drug-resistance --samples-dir results/samples \
+  --output-dir results --drug-db data/drug_db/Total_drug_resistance_mutation.txt
+python -m src.cli investigation-alerts \
+  --cluster-assignments results/core/cluster_assignments.tsv \
+  --drug-resistance-dir results/samples --output results/logs/investigation_alerts.tsv
+```
+
+这些输出是防控筛查和人工复核的辅助证据：SNP 近缘性不等于已证实传播；未检出数据库标记也不等于药敏；耐药分级不能替代表型药敏、临床资料和专业人员判断。
+
+Snakemake 默认启用这些扩展；在 `config/config.yaml` 中设置
+`report.skip_extensions: true` 可以把扩展规则从 DAG 中排除。直接运行
+`build-reports` 时使用 `--skip-extensions` 达到同样效果。扩展规则本身使用单线程
+调度槽（`threads.cluster`、`threads.drug_resistance`、
+`threads.investigation_alerts`）；它们当前是轻量串行步骤，主要用于资源调度。
 
 ## 11. 两两 SNP 距离实现更新
 

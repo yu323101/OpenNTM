@@ -95,6 +95,44 @@ def _lineage_summary_candidates(input_root: Path, run_id: str) -> List[Path]:
     return candidates
 
 
+def _results_root(input_root: Path) -> Path:
+    return input_root.parent if input_root.name == "samples" else input_root
+
+
+def _extension_record(input_root: Path, sample_id: str, sample_roots: List[Path]) -> Dict[str, str]:
+    """Load cluster and resistance fields without making them hard dependencies."""
+    results_root = _results_root(input_root)
+    record = {
+        "cluster_id": "UNKNOWN",
+        "cluster_size": "",
+        "drug_resistance_class": "NOT_RUN",
+        "resistant_drugs": "-",
+        "organism_scope": "UNSPECIFIED",
+    }
+
+    cluster_file = results_root / "core" / "cluster_assignments.tsv"
+    if cluster_file.exists():
+        with open(cluster_file, "r", encoding="utf-8", errors="ignore") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                if str(row.get("sample_id", "")) == sample_id:
+                    record["cluster_id"] = str(row.get("cluster_id", "UNKNOWN"))
+                    record["cluster_size"] = str(row.get("cluster_size", ""))
+                    break
+
+    resistance_candidates = [
+        root / "table" / f"{sample_id}_drug_resistance.tsv" for root in sample_roots
+    ]
+    resistance_file = _find_first(resistance_candidates)
+    if resistance_file and resistance_file.exists():
+        with open(resistance_file, "r", encoding="utf-8", errors="ignore") as handle:
+            row = next(csv.DictReader(handle, delimiter="\t"), None)
+        if row:
+            record["drug_resistance_class"] = str(row.get("classification", record["drug_resistance_class"]))
+            record["resistant_drugs"] = str(row.get("resistant_drugs", record["resistant_drugs"]))
+            record["organism_scope"] = str(row.get("organism_scope", record["organism_scope"]))
+    return record
+
+
 
 def _resolve_legacy_base(user_base: Optional[Path] = None) -> Path:
     candidates: List[Path] = []
@@ -168,6 +206,7 @@ def _build_lineage_table(
         "status": "NO_LINEAGE_FILE",
         "message": "Lineage output not found",
     }
+    record.update(_extension_record(input_root, sample_id, _sample_input_roots(input_root, sample_id)))
 
     def _load_first_row(tsv_path: Path) -> Dict[str, str] | None:
         with open(tsv_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -191,6 +230,11 @@ def _build_lineage_table(
         writer.writerow(["样本ID", record.get("sample_id", sample_id), ""])
         writer.writerow(["大谱系", record.get("lineage_major", "UNKNOWN"), "主要谱系判定"])
         writer.writerow(["亚谱系", record.get("lineage_sub", ""), "细分亚谱系判定"])
+        writer.writerow(["基因组近缘簇", record.get("cluster_id", "UNKNOWN"), "基于SNP阈值的连通分量；不等同于确证传播"])
+        writer.writerow(["簇内样本数", record.get("cluster_size", ""), "需结合流调资料解释"])
+        writer.writerow(["耐药风险分级", record.get("drug_resistance_class", "NOT_RUN"), "基因组标记筛查，不替代表型药敏"])
+        writer.writerow(["耐药相关药物", record.get("resistant_drugs", "-"), "数据库命中药物"])
+        writer.writerow(["耐药筛查适用范围", record.get("organism_scope", "UNSPECIFIED"), "TB/MTB 数据专用；不能直接解释 NTM"])
         writer.writerow(["方法", record.get("method", ""), "谱系规则版本"])
         writer.writerow(
             [

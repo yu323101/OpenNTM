@@ -2,6 +2,7 @@ rule build_reports:
     input:
         samplesheet=str(SAMPLESHEET),
         downstream_done=rules.prepare_downstream_inputs.output.done,
+        epidemiology_done=([] if SKIP_EXTENSIONS else rules.generate_investigation_alerts.output.done),
     output:
         done=result_path("logs", "workflow", "build_reports.done"),
         lineage_summary=LINEAGE_SUMMARY_OUTPUTS,
@@ -18,6 +19,9 @@ rule build_reports:
         skip_lineage_flag=SKIP_LINEAGE_FLAG,
         skip_figures_flag=SKIP_FIGURES_FLAG,
         skip_tables_flag=SKIP_TABLES_FLAG,
+        # Extension rules, when enabled, already produce these files before
+        # build-reports; avoid running the same steps a second time here.
+        skip_extensions_flag="--skip-extensions",
         run_id=RUN_ID,
         lineage_run=LINEAGE_SUMMARY_RUN,
         lineage_latest=LINEAGE_SUMMARY_LATEST,
@@ -40,6 +44,7 @@ rule build_reports:
             {params.skip_lineage_flag} \
             {params.skip_figures_flag} \
             {params.skip_tables_flag} \
+            {params.skip_extensions_flag} \
             &> {log}
         if [ -f "{params.lineage_run}" ]; then cp {params.lineage_run} {params.lineage_latest}; fi
         if [ -f "{params.figure_run}" ]; then cp {params.figure_run} {params.figure_latest}; fi

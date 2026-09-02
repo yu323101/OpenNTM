@@ -17,6 +17,11 @@ threads:
   # Threads passed to snp-dists for pairwise SNP distances. Default is 1;
   # increase this value (for example, to 4 or 8) when more CPU is available.
   distance: 1
+  # Lightweight serial extension rules; these values are Snakemake scheduling
+  # slots, not internal parallelism controls.
+  cluster: 1
+  drug_resistance: 1
+  investigation_alerts: 1
 
 workflow:
   verbose: false
@@ -27,6 +32,23 @@ report:
   skip_lineage: false
   skip_figures: false
   skip_tables: false
+  # Set true to omit cluster/resistance/alert rules from the Snakemake DAG.
+  # The CLI flag --skip-extensions has the same effect for build-reports.
+  skip_extensions: false
+
+# Epidemiology-supporting outputs. These are screening and triage aids, not
+# standalone proof of transmission or phenotypic drug susceptibility.
+clustering:
+  # Use only for samples processed against a comparable reference and variant
+  # definition. For NTM, choose an appropriate NTM reference/threshold first
+  # and interpret clusters with epidemiological records.
+  snp_threshold: 12
+
+drug_resistance:
+  # This bundled marker table and MTB resistance categories are for MTB/TB
+  # data only. Do not interpret these results for NTM; use a validated,
+  # species-specific NTM database and phenotypic DST instead.
+  database: data/drug_db/Total_drug_resistance_mutation.txt
 
 core_gate:
   min_mean_depth: 10
