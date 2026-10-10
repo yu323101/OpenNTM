@@ -1,4 +1,4 @@
-"""Command-line interface for MTB-Evo."""
+"""Command-line interface for OpenNTM."""
 
 import typer
 
@@ -22,8 +22,8 @@ from src.commands.report_tables import report_tables_cmd
 from src.commands.wild_extract import wild_extract_cmd
 
 app = typer.Typer(
-    name="mtb-evo",
-    help="Mycobacterium tuberculosis evolutionary analysis pipeline",
+    name="openntm",
+    help="OpenNTM: mycobacterial whole-genome analysis with TB and NTM routes",
     no_args_is_help=True,
 )
 

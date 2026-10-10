@@ -3,16 +3,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mtb-evo"
+name = "OpenNTM"
 version = "0.1.0"
-description = "Mycobacterium tuberculosis evolutionary analysis pipeline"
+description = "Mycobacterial whole-genome analysis with TB and NTM routes"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
     {name = "Author", email = "author@example.com"}
 ]
-keywords = ["bioinformatics", "tuberculosis", "evolution", "snp"]
+keywords = ["bioinformatics", "NTM", "tuberculosis", "environmental-genomics", "snp"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -38,6 +38,7 @@ dev = [
 ]
 
 [project.scripts]
+openntm = "src.cli:main"
 mtb-evo = "src.cli:main"
 
 [tool.hatch.build.targets.wheel]
