@@ -7,6 +7,7 @@ dependencies:
   - python=3.9
   - pip
   - sickle-trim
+  - bwa
   - bowtie2
   - samtools
   - varscan

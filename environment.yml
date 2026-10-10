@@ -8,6 +8,7 @@ dependencies:
   - pip
   # Bioinformatics tools
   - sickle-trim
+  - bwa
   - bowtie2
   - samtools
   - varscan

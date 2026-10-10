@@ -177,3 +177,9 @@ snakemake --snakefile Snakefile --configfile config/config.yaml -n all --config 
 
 1. 补充回归测试（图表/表格口径一致性）。
 2. 继续细化 core 规则并增强失败诊断日志。
+
+### NTM BWA-MEM analysis route
+
+The optional `analysis_route: NTM_bwamem` follows the user-provided MAB workflow,
+including mpileup `-O`, low-frequency candidate calls and >=75% final SNP calls.
+See [configuration and output details](docs/NTM_bwamem.md).

@@ -10,13 +10,15 @@ rule core_trim_reads:
         TRIM_READS_THREADS
     resources:
         trim_io=1
+    params:
+        min_length=TRIM_MIN_LENGTH_ARG,
     log:
         result_path("logs", "rules", "core_trim_reads", "{sample}.log"),
     shell:
         r'''
         set -euo pipefail
         mkdir -p "$(dirname {log})" "$(dirname {output.r1_trim})"
-        sickle pe -t sanger \
+        sickle pe -t sanger {params.min_length} \
             -f "{input.r1}" \
             -r "{input.r2}" \
             -o "{output.r1_trim}" \
@@ -34,20 +36,27 @@ rule core_align_and_sort:
     output:
         bam=result_path("samples", "{sample}", "alignment_qc", "{sample}.sort.bam"),
     threads:
-        BOWTIE2_THREADS + SAMTOOLS_SORT_THREADS
+        ALIGN_THREADS + SAMTOOLS_SORT_THREADS
     log:
         result_path("logs", "rules", "core_align_and_sort", "{sample}.log"),
     params:
         index_prefix=BOWTIE2_INDEX_PREFIX,
         ref_fasta=REFERENCE_FASTA,
         ref_fai=REFERENCE_FASTA_FAI,
-        bowtie_threads=BOWTIE2_THREADS,
+        bowtie_threads=ALIGN_THREADS,
+        bwa_index=BWA_INDEX_PREFIX,
+        mab_route=int(MAB_ROUTE),
         sort_threads=SAMTOOLS_SORT_THREADS,
     shell:
         r'''
         set -euo pipefail
         mkdir -p "$(dirname {log})" "$(dirname {output.bam})"
 
+        if [ "{params.mab_route}" = "1" ]; then
+            bash src/scripts/NTM_bwamem.sh align "{params.ref_fasta}" "{params.bwa_index}" \
+                "{input.r1_trim}" "{input.r2_trim}" "{input.s_trim}" "{output.bam}" \
+                "{wildcards.sample}" {params.bowtie_threads} {params.sort_threads} >> {log} 2>&1
+        else
         missing_index=0
         for suf in 1 2 3 4 rev.1 rev.2; do
             if [ ! -f "{params.index_prefix}.${{suf}}.bt2" ]; then
@@ -80,6 +89,7 @@ rule core_align_and_sort:
         | samtools sort -@ {params.sort_threads} -m 4G -o "{output.bam}" - 2>> {log}
 
         samtools flagstat "{output.bam}" >> {log} 2>&1
+        fi
         '''
 
 
@@ -97,8 +107,8 @@ rule core_depth_metrics:
         result_path("logs", "rules", "core_depth_metrics", "{sample}.log"),
     params:
         genome_length=GENOME_LENGTH,
-        min_mean_depth=int(config.get("core_gate", {}).get("min_mean_depth", 10)),
-        min_coverage_fraction=float(config.get("core_gate", {}).get("min_coverage_fraction", 0.95)),
+        min_mean_depth=0 if MAB_ROUTE else int(config.get("core_gate", {}).get("min_mean_depth", 10)),
+        min_coverage_fraction=0 if MAB_ROUTE else float(config.get("core_gate", {}).get("min_coverage_fraction", 0.95)),
     shell:
         r'''
         set -euo pipefail
@@ -142,6 +152,7 @@ rule core_call_variants:
         ref_fasta=REFERENCE_FASTA,
         varscan_jar=VARSCAN_JAR,
         ppe_list=PPE_LIST,
+        mab_route=int(MAB_ROUTE),
         python_bin=PYTHON_BIN,
         cli_module=CLI_MODULE,
         discard_log=result_path("logs", "discard.txt"),
@@ -163,7 +174,11 @@ rule core_call_variants:
         mean_depth=$(tail -n 1 "{input.status}" | cut -f2)
         coverage_fraction=$(tail -n 1 "{input.status}" | cut -f3)
 
-        if [ "$passed" = "1" ]; then
+        if [ "{params.mab_route}" = "1" ]; then
+            bash src/scripts/NTM_bwamem.sh call "{params.ref_fasta}" "{input.bam}" \
+                "{params.varscan_jar}" "{params.ppe_list}" "$variant_dir" "$sample_id" \
+                "{params.python_bin}" "{params.cli_module}" >> {log} 2>&1
+        elif [ "$passed" = "1" ]; then
             min_cov=$(printf '%.0f' "$mean_depth")
             min_cov=$(( min_cov / 10 ))
 

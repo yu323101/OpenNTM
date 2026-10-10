@@ -1,3 +1,6 @@
+# Select bowtie2_legacy or NTM_bwamem. Use separate results_dir values per route.
+analysis_route: bowtie2_legacy
+
 samplesheet: config/samplesheet.csv
 results_dir: results
 python_bin: python
@@ -9,6 +12,7 @@ threads:
   # SAM-to-sort streaming fix, throughput scales best with many parallel
   # sample jobs at modest per-job threads: 8 + 2 threads x -j 24 ~= 240 CPUs.
   bowtie2: 8
+  bwa: 8
   samtools_sort: 2
   depth_metrics: 1
   call_variants: 1

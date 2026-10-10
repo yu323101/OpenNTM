@@ -33,7 +33,8 @@ env/
 *~
 
 # 测试相关（保留代码，忽略输出）
-tests/
+tests/*
+!tests/test_mab_route.py
 tests/__pycache__/
 tests/*.pyc
 .pytest_cache/
@@ -79,3 +80,11 @@ data/bowtie2_index/*.bt2
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# BWA reference index artifacts
+*.amb
+*.ann
+*.bwt
+*.pac
+*.sa
+*.index.lock

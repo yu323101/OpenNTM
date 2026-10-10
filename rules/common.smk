@@ -13,6 +13,14 @@ REPORT_CFG = config.get("report", {})
 WORKFLOW_CFG = config.get("workflow", {})
 REFERENCE_CFG = config.get("references", {})
 
+ANALYSIS_ROUTE = str(config.get("analysis_route", "bowtie2_legacy"))
+if ANALYSIS_ROUTE not in {"bowtie2_legacy", "NTM_bwamem"}:
+    raise WorkflowError("analysis_route must be bowtie2_legacy or NTM_bwamem")
+MAB_ROUTE = ANALYSIS_ROUTE == "NTM_bwamem"
+BWA_THREADS = int(THREADS_CFG.get("bwa", 8))
+ALIGN_THREADS = BWA_THREADS if MAB_ROUTE else int(THREADS_CFG.get("bowtie2", 4))
+TRIM_MIN_LENGTH_ARG = "-l 35" if MAB_ROUTE else ""
+
 TRIM_READS_THREADS = int(THREADS_CFG.get("trim_reads", 1))
 BOWTIE2_THREADS = int(THREADS_CFG.get("bowtie2", 4))
 SAMTOOLS_SORT_THREADS = int(THREADS_CFG.get("samtools_sort", 2))
@@ -76,6 +84,10 @@ ANCESTOR_FASTA = str(
     )
 )
 PPE_LIST = str(Path(REFERENCE_CFG.get("ppe_list", "data/PPE_INS_loci_Rv.list")))
+BWA_INDEX_PREFIX = str(ACTIVE_REFERENCE_CFG.get("bwa_index", REFERENCE_FASTA))
+if MAB_ROUTE and not ACTIVE_REFERENCE_CFG.get("ppe_list"):
+    raise WorkflowError("NTM_bwamem requires references.profiles.<active>.ppe_list matched to that reference")
+PPE_LIST = str(ACTIVE_REFERENCE_CFG.get("ppe_list", PPE_LIST))
 VARSCAN_JAR = str(Path(REFERENCE_CFG.get("varscan_jar", "src/scripts/VarScan.v2.3.9.jar")))
 GENOME_LENGTH = int(ACTIVE_REFERENCE_CFG.get("genome_length", REFERENCE_CFG.get("genome_length", 4411532)))
 
