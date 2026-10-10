@@ -13,6 +13,8 @@ dependencies:
   - varscan
   - fasttree
   - fastp
+  # Compiled pairwise SNP distance calculator used by the core distance rule.
+  - snp-dists=1.2.0
   # Perl
   - perl
   - snakemake-minimal

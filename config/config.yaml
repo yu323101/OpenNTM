@@ -5,8 +5,11 @@ cli_module: src.cli
 
 threads:
   trim_reads: 1
-  bowtie2: 16
-  samtools_sort: 4
+  # bowtie2 + samtools_sort form one job (core_align_and_sort). With the
+  # SAM-to-sort streaming fix, throughput scales best with many parallel
+  # sample jobs at modest per-job threads: 8 + 2 threads x -j 24 ~= 240 CPUs.
+  bowtie2: 8
+  samtools_sort: 2
   depth_metrics: 1
   call_variants: 1
   diff_loci: 1
@@ -14,7 +17,9 @@ threads:
   merge: 1
   wild_extract: 1
   filter_core: 1
-  distance: 1
+  # Pairwise SNP distance uses the compiled snp-dists tool, which accepts
+  # -j threads. Only one distance job exists, so give it spare CPUs.
+  distance: 8
 
 workflow:
   verbose: false

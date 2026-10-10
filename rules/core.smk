@@ -47,7 +47,6 @@ rule core_align_and_sort:
         r'''
         set -euo pipefail
         mkdir -p "$(dirname {log})" "$(dirname {output.bam})"
-        sam_tmp="{output.bam}.tmp.sam"
 
         missing_index=0
         for suf in 1 2 3 4 rev.1 rev.2; do
@@ -70,19 +69,17 @@ rule core_align_and_sort:
             samtools faidx "{params.ref_fasta}" >> {log} 2>&1
         fi
 
+        # Stream bowtie2 output straight into samtools sort to avoid
+        # writing a multi-GB intermediate SAM file to disk.
         bowtie2 -p {params.bowtie_threads} \
             -x {params.index_prefix} \
             -1 "{input.r1_trim}" \
             -2 "{input.r2_trim}" \
             -U "{input.s_trim}" \
-            -S "$sam_tmp" \
-            >> {log} 2>&1
-
-        samtools view -bh -T "{params.ref_fasta}" "$sam_tmp" 2>> {log} \
-        | samtools sort -@ {params.sort_threads} -o "{output.bam}" - 2>> {log}
+            2>> {log} \
+        | samtools sort -@ {params.sort_threads} -m 4G -o "{output.bam}" - 2>> {log}
 
         samtools flagstat "{output.bam}" >> {log} 2>&1
-        rm -f "$sam_tmp"
         '''
 
 
@@ -109,8 +106,8 @@ rule core_depth_metrics:
 
         samtools depth "{input.bam}" > "{output.depth}" 2>> {log}
 
-        mean_depth=$(awk '{{sum+=$3; n+=1}} END {{if (n>0) printf "%.6f", sum/n; else printf "0"}}' "{output.depth}")
-        coverage_fraction=$(awk -v g={params.genome_length} 'END {{if (g>0) printf "%.6f", NR/g; else printf "0"}}' "{output.depth}")
+        # Single-pass awk computes both mean depth and coverage fraction.
+        read -r mean_depth coverage_fraction <<< "$(awk -v g={params.genome_length} '{{sum+=$3; n+=1}} END {{if (n>0) printf "%.6f %.6f", sum/n, (g>0)?n/g:0; else printf "0 0"}}' "{output.depth}")"
         mean_round=$(printf '%.0f' "$mean_depth")
 
         passed=0
@@ -155,7 +152,6 @@ rule core_call_variants:
 
         sample_id={params.sample_id}
         variant_dir="{params.sample_dir}/variant_analysis"
-        pileup="$variant_dir/${{sample_id}}.pileup"
         varscan="$variant_dir/${{sample_id}}.varscan"
         cns="$variant_dir/${{sample_id}}.cns"
         vars="$variant_dir/${{sample_id}}.vars"
@@ -171,25 +167,42 @@ rule core_call_variants:
             min_cov=$(printf '%.0f' "$mean_depth")
             min_cov=$(( min_cov / 10 ))
 
-            samtools mpileup -q 30 -Q 30 -Bf "{params.ref_fasta}" "{input.bam}" > "$pileup" 2>> {log}
-            java -jar "{params.varscan_jar}" mpileup2snp "$pileup" \
-                --min-coverage "$min_cov" \
-                --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 \
-                > "$varscan" 2>> {log}
-            java -jar "{params.varscan_jar}" mpileup2cns "$pileup" \
-                --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 \
-                > "$cns" 2>> {log}
+            # Stream the mpileup into both VarScan consumers at once
+            # (process substitution + tee) so the multi-GB pileup text
+            # never touches disk. "-" tells VarScan to read stdin.
+            samtools mpileup -q 30 -Q 30 -Bf "{params.ref_fasta}" "{input.bam}" \
+                2>> {log} \
+                | tee >(
+                    java -jar "{params.varscan_jar}" mpileup2snp - \
+                        --min-coverage "$min_cov" \
+                        --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 \
+                        > "$varscan" 2>> {log}
+                ) \
+                | java -jar "{params.varscan_jar}" mpileup2cns - \
+                    --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 \
+                    > "$cns" 2>> {log}
+
+            # tee does not propagate the process-substitution exit code;
+            # VarScan always writes a header, so an empty file means failure.
+            if [ ! -s "$varscan" ]; then
+                echo "VarScan mpileup2snp produced no output" >> {log}
+                exit 1
+            fi
+            if [ ! -s "$cns" ]; then
+                echo "VarScan mpileup2cns produced no output" >> {log}
+                exit 1
+            fi
 
             awk -F '[:]' '{{if($9==0 || $10==0)$0="";else print $0}}' "$varscan" > "$vars"
             {params.python_bin} -m {params.cli_module} ppe-filter --ppe-list "{params.ppe_list}" --input "$vars" --output "$var_ppe" >> {log} 2>&1
             {params.python_bin} -m {params.cli_module} format-trans --input "$var_ppe" --output "$var_for" >> {log} 2>&1
             cut -f2,3,4 "$var_for" > "$snp"
 
-            rm -f "$pileup" "$varscan" "$var_ppe" "$var_for"
+            rm -f "$varscan" "$var_ppe" "$var_for"
             echo "${{sample_id}} completed successfully" >> {log}
         else
             echo "${{sample_id}} do not meet criteria: ${{mean_depth}} ${{coverage_fraction}}" >> {params.discard_log}
-            rm -f "$pileup" "$varscan" "$cns" "$vars" "$var_ppe" "$var_for" "$snp"
+            rm -f "$varscan" "$cns" "$vars" "$var_ppe" "$var_for" "$snp"
             echo "${{sample_id}} discarded (low coverage)" >> {log}
         fi
 
@@ -345,7 +358,11 @@ rule core_compute_distance:
         r'''
         set -euo pipefail
         mkdir -p "$(dirname {log})" "$(dirname {output.distance})"
-        {params.python_bin} -m {params.cli_module} distance --alignment {input.core_fa} --output {output.distance} > {log} 2>&1
+        {params.python_bin} -m {params.cli_module} distance \
+            --alignment "{input.core_fa}" \
+            --output "{output.distance}" \
+            --threads {threads} \
+            > {log} 2>&1
         '''
 
 
