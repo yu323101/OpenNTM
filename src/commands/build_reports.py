@@ -9,6 +9,9 @@ import typer
 from typer import Option
 
 from src.commands._common import resolve_samples_input
+from src.commands.cluster import assign_clusters
+from src.commands.drug_resistance import DEFAULT_DRUG_DB, screen_samples
+from src.commands.investigation_alerts import generate_alerts
 from src.commands.lineage import run_lineage
 from src.commands.report_figures import run_report_figures
 from src.commands.report_tables import run_report_tables
@@ -60,9 +63,17 @@ def build_reports_cmd(
     skip_lineage: bool = Option(False, "--skip-lineage", help="Skip lineage assignment"),
     skip_figures: bool = Option(False, "--skip-figures", help="Skip figure reporting"),
     skip_tables: bool = Option(False, "--skip-tables", help="Skip table reporting"),
+    skip_extensions: bool = Option(False, "--skip-extensions", help="Skip cluster/resistance/alert outputs"),
+    cluster_threshold: int = Option(
+        12,
+        "--cluster-threshold",
+        min=0,
+        help="SNP threshold for genomic proximity clusters",
+    ),
+    drug_db: Path = Option(DEFAULT_DRUG_DB, "--drug-db", help="Resistance marker database TSV"),
     strict: bool = Option(False, "--strict", help="Fail if any report step fails"),
 ) -> None:
-    """Build lineage, figure, and table outputs from standardized results layout."""
+    """Build reports and epidemiology-supporting outputs from standardized results."""
 
     input_file = resolve_samples_input(samples, samplesheet)
     output_dir = output_dir.resolve()
@@ -79,6 +90,44 @@ def build_reports_cmd(
         logger.debug("Verbose mode enabled for build-reports")
 
     failures: list[str] = []
+
+    if skip_extensions:
+        logger.info("Skipping epidemiology-supporting extensions (--skip-extensions)")
+    else:
+        distance_matrix = output_dir / "core" / "distance_matrix.txt"
+        cluster_output = output_dir / "core" / "cluster_assignments.tsv"
+        resistance_manifest = output_dir / "logs" / "drug_resistance_manifest.tsv"
+        alerts_output = output_dir / "logs" / "investigation_alerts.tsv"
+        cluster_ready = False
+        if distance_matrix.exists():
+            ok, err = _run_step(
+                "cluster",
+                strict,
+                lambda: assign_clusters(distance_matrix, cluster_output, cluster_threshold),
+            )
+            cluster_ready = ok
+            if not ok:
+                failures.append(f"cluster:{err}")
+        else:
+            logger.warning("Skipping cluster: distance matrix not found at %s", distance_matrix)
+        if samples_dir.exists():
+            ok, err = _run_step(
+                "drug-resistance",
+                strict,
+                lambda: screen_samples(samples_dir, drug_db, output_dir, resistance_manifest),
+            )
+            if not ok:
+                failures.append(f"drug-resistance:{err}")
+        else:
+            logger.warning("Skipping drug resistance: samples directory not found at %s", samples_dir)
+        if cluster_ready:
+            ok, err = _run_step(
+                "investigation-alerts",
+                strict,
+                lambda: generate_alerts(cluster_output, samples_dir, alerts_output),
+            )
+            if not ok:
+                failures.append(f"investigation-alerts:{err}")
 
     if skip_lineage:
         logger.info("Skipping lineage assignment (--skip-lineage)")

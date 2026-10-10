@@ -1,114 +1,172 @@
-"""Calculate pairwise SNP distances with the compiled ``snp-dists`` tool."""
+"""Calculate pairwise SNP distances with :program:`snp-dists`."""
 
 from __future__ import annotations
 
 import csv
-import shutil
 import subprocess
-import tempfile
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import typer
 from typer import Option
 
 from src.utils.logging_config import get_logger
 
-
 logger = get_logger("commands.distance")
 
 
-def _read_alignment_names(alignment_file: Path) -> List[str]:
-    """Read and validate FASTA names without loading the alignment sequences."""
+def build_snp_dists_command(
+    alignment_file: Path,
+    threads: int = 1,
+    executable: str = "snp-dists",
+) -> List[str]:
+    """Build the external command used for compatible SNP distances.
+
+    ``snp-dists`` defaults to counting only A/C/G/T and ignoring ambiguous
+    bases and gaps.  ``-k`` is also intentional: the legacy Python code did
+    not uppercase input, so lower-case masked bases remain ignored here.
+    ``-L -m -t`` computes only unique pairs and gives us a parseable
+    three-column stream; the converter below restores the legacy
+    upper-triangle output format.
+    """
+    if threads < 1:
+        raise ValueError("threads must be >= 1")
+
+    return [
+        executable,
+        "-q",
+        "-k",
+        "-L",
+        "-m",
+        "-t",
+        "-j",
+        str(threads),
+        str(alignment_file),
+    ]
+
+
+def read_alignment_names(alignment_file: Path) -> List[str]:
+    """Return FASTA record names in their original order."""
     names: List[str] = []
-    with alignment_file.open(encoding="utf-8") as handle:
-        for line in handle:
+    with open(alignment_file, "r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
             if not line.startswith(">"):
                 continue
             name = line[1:].strip()
             if not name:
-                raise ValueError(f"Empty FASTA header in {alignment_file}")
+                raise ValueError(f"Empty FASTA record name on line {line_number}")
+            if any(character.isspace() for character in name):
+                raise ValueError(
+                    "FASTA record names used for distance calculation must not contain "
+                    f"whitespace: {name!r}"
+                )
+            if name in names:
+                raise ValueError(f"Duplicate FASTA record name: {name!r}")
             names.append(name)
 
     if not names:
         raise ValueError(f"No FASTA records found in {alignment_file}")
-    if len(names) != len(set(names)):
-        raise ValueError(f"Duplicate FASTA headers found in {alignment_file}")
     return names
 
 
-def _write_upper_triangle(
-    lower_triangle_file: Path,
-    output: Path,
-    alignment_names: List[str],
-) -> int:
-    """Convert ``snp-dists -L -b`` output to the legacy three-column format."""
-    with lower_triangle_file.open(newline="", encoding="utf-8") as handle:
-        reader = csv.reader(handle, delimiter="\t")
-        header = next(reader, None)
-        if not header:
-            raise ValueError("snp-dists produced an empty distance matrix")
+def _parse_molten_rows(molten_output: str) -> Dict[Tuple[str, str], int]:
+    """Parse ``snp-dists -L -m -t`` output into an ordered-pair lookup."""
+    distances: Dict[Tuple[str, str], int] = {}
+    data_seen = False
 
-        matrix_names = [field.strip() for field in header[1:]]
-        if matrix_names != alignment_names:
+    for line_number, raw_line in enumerate(molten_output.splitlines(), start=1):
+        if not raw_line.strip():
+            continue
+
+        fields = next(csv.reader([raw_line], delimiter="\t"))
+        if len(fields) != 3:
+            # This fallback makes the parser useful with whitespace-formatted
+            # fixtures, while retaining tabs for sample names in real output.
+            fields = raw_line.split()
+        if len(fields) != 3:
             raise ValueError(
-                "snp-dists sample order does not match the FASTA alignment: "
-                f"expected {alignment_names[:3]}..., got {matrix_names[:3]}..."
+                f"Invalid snp-dists molten output on line {line_number}: {raw_line!r}"
             )
 
-        output.parent.mkdir(parents=True, exist_ok=True)
-        pair_count = 0
-        row_index = 0
-        with output.open("w", encoding="utf-8") as out_handle:
-            for row in reader:
-                if not row or not any(field.strip() for field in row):
-                    continue
-                if row_index >= len(matrix_names):
-                    raise ValueError("snp-dists produced more rows than sequence names")
+        left, right, distance_text = (field.strip() for field in fields)
+        try:
+            distance = int(distance_text)
+        except ValueError:
+            if not data_seen and left.lower() in {"sequence_1", "sample_1"}:
+                continue
+            raise ValueError(
+                f"Invalid distance on snp-dists output line {line_number}: "
+                f"{distance_text!r}"
+            ) from None
 
-                row_name = row[0].strip()
-                expected_name = matrix_names[row_index]
-                if row_name != expected_name:
-                    raise ValueError(
-                        f"Unexpected snp-dists row {row_index + 1}: "
-                        f"expected {expected_name!r}, got {row_name!r}"
-                    )
+        if not left or not right:
+            raise ValueError(f"Empty sample name on snp-dists output line {line_number}")
+        if distance < 0:
+            raise ValueError(f"Negative distance on snp-dists output line {line_number}")
 
-                values = row[1:]
-                if len(values) < row_index + 1:
-                    raise ValueError(
-                        f"Incomplete lower triangle for {row_name!r}: "
-                        f"expected {row_index + 1} values, got {len(values)}"
-                    )
+        key = (left, right)
+        previous = distances.get(key)
+        if previous is not None and previous != distance:
+            raise ValueError(f"Conflicting distances for ordered pair {key!r}")
+        distances[key] = distance
+        data_seen = True
 
-                for column_index in range(row_index):
-                    try:
-                        distance = int(values[column_index].strip())
-                    except ValueError as exc:
-                        raise ValueError(
-                            f"Invalid distance for {matrix_names[column_index]!r}, "
-                            f"{row_name!r}: {values[column_index]!r}"
-                        ) from exc
-                    if distance < 0:
-                        raise ValueError(f"Negative distance for {row_name!r}")
-                    out_handle.write(
-                        f"{matrix_names[column_index]}\t{row_name}\t{distance}\n"
-                    )
-                    pair_count += 1
+    if not distances:
+        raise ValueError("snp-dists produced no distance rows")
+    return distances
 
-                row_index += 1
 
-    if row_index != len(matrix_names):
-        raise ValueError(
-            f"snp-dists produced {row_index} rows for {len(matrix_names)} sequences"
-        )
+def molten_to_upper_triangle(
+    molten_output: str,
+    output: Path,
+    sample_order: Optional[Sequence[str]] = None,
+) -> None:
+    """Convert ``snp-dists -L -m -t`` output to the legacy three-column TSV.
 
-    expected_pairs = len(alignment_names) * (len(alignment_names) - 1) // 2
-    if pair_count != expected_pairs:
-        raise ValueError(
-            f"Expected {expected_pairs} unique pairs, converted {pair_count}"
-        )
-    return pair_count
+    The legacy command emits each unordered pair once, in FASTA order, as
+    ``sample_i<TAB>sample_j<TAB>distance`` for ``i < j``.  ``snp-dists``
+    ``snp-dists`` molten output contains the unique triangle (including the
+    diagonal), so we validate it and emit the same upper-triangle stream for
+    downstream tools.  Full molten output is also accepted for compatibility
+    with fixtures and manual callers.
+    """
+    distances = _parse_molten_rows(molten_output)
+
+    if sample_order is None:
+        inferred: List[str] = []
+        for left, right in distances:
+            if left not in inferred:
+                inferred.append(left)
+            if right not in inferred:
+                inferred.append(right)
+        sample_order = inferred
+    else:
+        sample_order = list(sample_order)
+
+    if not sample_order or len(sample_order) != len(set(sample_order)):
+        raise ValueError("sample_order must contain unique, non-empty sample names")
+
+    expected = set(sample_order)
+    observed = {name for pair in distances for name in pair}
+    unknown = observed - expected
+    missing = expected - observed
+    if unknown:
+        raise ValueError(f"snp-dists output contains unknown samples: {sorted(unknown)!r}")
+    if missing:
+        raise ValueError(f"snp-dists output is missing samples: {sorted(missing)!r}")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+        for index, left in enumerate(sample_order):
+            for right in sample_order[index + 1 :]:
+                forward = distances.get((left, right))
+                reverse = distances.get((right, left))
+                if forward is None and reverse is None:
+                    raise ValueError(f"snp-dists output is missing pair {left!r}, {right!r}")
+                if forward is not None and reverse is not None and forward != reverse:
+                    raise ValueError(f"Asymmetric distances for pair {left!r}, {right!r}")
+                writer.writerow([left, right, forward if forward is not None else reverse])
 
 
 def calculate_distance(
@@ -117,76 +175,35 @@ def calculate_distance(
     threads: int = 1,
     executable: str = "snp-dists",
 ) -> None:
-    """Run ``snp-dists`` and preserve MTB-evo's three-column output contract.
-
-    The default ``snp-dists`` rules count only A/C/G/T mismatches and ignore
-    ambiguous bases and gaps. This matches the previous Python implementation.
-    The compiled tool writes a lower-triangle matrix internally; this wrapper
-    converts it to the historical upper-triangle ``sample1\tsample2\tdistance``
-    format consumed by downstream commands.
-    """
-    if threads < 1:
-        raise ValueError("threads must be >= 1")
-    if not alignment_file.is_file():
-        raise FileNotFoundError(f"Alignment file does not exist: {alignment_file}")
-
-    alignment_names = _read_alignment_names(alignment_file)
-    executable_path = shutil.which(executable)
-    if executable_path is None:
-        candidate = Path(executable)
-        if candidate.is_file() and candidate.stat().st_mode & 0o111:
-            executable_path = str(candidate)
-    if executable_path is None:
-        raise RuntimeError(
-            "snp-dists executable was not found. Install the workflow environment "
-            "or pass --snp-dists /path/to/snp-dists."
-        )
-
-    output.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        executable_path,
-        "-q",
-        "-b",
-        "-L",
-        "-j",
-        str(threads),
-        str(alignment_file),
-    ]
+    """Calculate pairwise SNP distances from an alignment using ``snp-dists``."""
     logger.info(
-        "Calculating pairwise SNP distance with snp-dists threads=%d: %s -> %s",
-        threads,
+        "Calculating pairwise distance from %s to %s with %s thread(s)",
         alignment_file,
         output,
+        threads,
     )
+    names = read_alignment_names(alignment_file)
+    command = build_snp_dists_command(alignment_file, threads, executable)
 
-    with tempfile.TemporaryDirectory(
-        prefix=".snp-dists-",
-        dir=str(output.parent),
-    ) as temporary_dir:
-        lower_triangle_file = Path(temporary_dir) / "lower_triangle.tsv"
-        with lower_triangle_file.open("w", encoding="utf-8") as raw_output:
-            completed = subprocess.run(
-                command,
-                stdout=raw_output,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-
-        if completed.returncode != 0:
-            details = (completed.stderr or "").strip()
-            suffix = f": {details}" if details else ""
-            raise RuntimeError(
-                f"snp-dists failed with exit code {completed.returncode}{suffix}"
-            )
-
-        pair_count = _write_upper_triangle(
-            lower_triangle_file,
-            output,
-            alignment_names,
+    try:
+        result = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
         )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "snp-dists was not found; install it with the mtb-evo conda environment"
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or exc.stdout or "").strip()
+        message = "snp-dists failed"
+        if details:
+            message = f"{message}: {details}"
+        raise RuntimeError(message) from exc
 
-    logger.info("Wrote %d unique pairwise distances to %s", pair_count, output)
+    molten_to_upper_triangle(result.stdout, output, names)
 
 
 def distance_cmd(
@@ -196,15 +213,11 @@ def distance_cmd(
         1,
         "--threads",
         "-t",
-        help="Number of snp-dists threads (default: 1; controlled by YAML in the workflow)",
-    ),
-    snp_dists: str = Option(
-        "snp-dists",
-        "--snp-dists",
-        help="snp-dists executable or absolute path",
+        min=1,
+        help="Threads passed to snp-dists (default: 1)",
     ),
 ) -> None:
-    """Calculate pairwise SNP distances using the compiled snp-dists tool."""
-    calculate_distance(alignment, output, threads=threads, executable=snp_dists)
+    """Calculate pairwise SNP distances with the configured thread count."""
+    calculate_distance(alignment, output, threads)
     logger.info("Distance calculation completed: %s", output)
     typer.echo(f"Distance calculation completed: {output}")

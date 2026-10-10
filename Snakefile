@@ -6,6 +6,7 @@ include: "rules/alignment_variant.smk"
 include: "rules/core.smk"
 include: "rules/downstream_inputs.smk"
 include: "rules/lineage.smk"
+include: "rules/extensions.smk"
 include: "rules/reports.smk"
 
 localrules: all, foundation_only, core_only, downstream_only, reports_only
