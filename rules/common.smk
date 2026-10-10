@@ -15,9 +15,9 @@ REFERENCE_CFG = config.get("references", {})
 CLUSTERING_CFG = config.get("clustering", {})
 DRUG_RESISTANCE_CFG = config.get("drug_resistance", {})
 
-ANALYSIS_ROUTE = str(config.get("analysis_route", "bowtie2_legacy"))
-if ANALYSIS_ROUTE not in {"bowtie2_legacy", "NTM_bwamem"}:
-    raise WorkflowError("analysis_route must be bowtie2_legacy or NTM_bwamem")
+ANALYSIS_ROUTE = str(config.get("analysis_route", "TB_bowtie2"))
+if ANALYSIS_ROUTE not in {"TB_bowtie2", "NTM_bwamem"}:
+    raise WorkflowError("analysis_route must be TB_bowtie2 or NTM_bwamem")
 MAB_ROUTE = ANALYSIS_ROUTE == "NTM_bwamem"
 BWA_THREADS = int(THREADS_CFG.get("bwa", 8))
 ALIGN_THREADS = BWA_THREADS if MAB_ROUTE else int(THREADS_CFG.get("bowtie2", 4))

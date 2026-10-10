@@ -1,5 +1,5 @@
-# Select bowtie2_legacy or NTM_bwamem. Use separate results_dir values per route.
-analysis_route: bowtie2_legacy
+# Select TB_bowtie2 or NTM_bwamem. Use separate results_dir values per route.
+analysis_route: TB_bowtie2
 
 samplesheet: config/samplesheet.csv
 results_dir: results

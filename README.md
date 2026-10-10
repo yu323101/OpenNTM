@@ -4,7 +4,7 @@ OpenNTM 是基于 Snakemake 的分枝杆菌全基因组测序分析项目，支�
 
 ## 两条技术路线
 
-### TB：`bowtie2_legacy`
+### TB：`TB_bowtie2`
 
 沿用原 `pair_fixed_nostrandbias.py` 的主要分析逻辑，是当前默认路线。
 
@@ -26,7 +26,7 @@ FASTQ → Sickle（最短 35 bp）→ BWA-MEM → BAM 合并、排序、索引
 
 | 设置 | TB 路线 | NTM 路线 |
 |---|---|---|
-| `analysis_route` | `bowtie2_legacy` | `NTM_bwamem` |
+| `analysis_route` | `TB_bowtie2` | `NTM_bwamem` |
 | 比对 | Bowtie2 默认 sensitive、end-to-end | BWA-MEM `-c 100 -M`，带样本 read group |
 | Sickle | 默认长度参数 | `-l 35` |
 | 样本准入 | 取整平均深度 ≥10×、覆盖 ≥95%，可配置 | 记录覆盖情况，不应用 TB 准入门槛 |
