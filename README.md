@@ -154,4 +154,4 @@ SNP 距离由 `snp-dists -q -k -L -m -t -j N` 计算，再转换为三列上三�
 - [基础配置](config/config.yaml)
 - [测试](tests/)
 
-项目名称已改为 **OpenNTM**。现有仓库 URL、历史脚本名称和旧命令别名保留兼容；GitHub 仓库仍位于 `yu323101/MTB-evo`。
+项目名称已改为 **OpenNTM**，GitHub 仓库位于 `yu323101/OpenNTM`。历史脚本名称和旧命令别名保留兼容，旧地址 `yu323101/MTB-evo` 会自动重定向。
