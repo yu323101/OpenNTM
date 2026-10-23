@@ -99,6 +99,7 @@ rule core_depth_metrics:
     output:
         depth=result_path("samples", "{sample}", "report_inputs", "alignment_qc", "{sample}.depth"),
         status=result_path("samples", "{sample}", "alignment_qc", "core_gate_status.tsv"),
+        mean_depth=result_path("samples", "{sample}", "report_inputs", "alignment_qc", "{sample}.mean_depth"),
     threads:
         DEPTH_METRICS_THREADS
     resources:
@@ -130,6 +131,7 @@ rule core_depth_metrics:
 
         printf 'sample_id\tmean_depth\tcoverage_fraction\tpassed_core_gate\tmessage\n' > "{output.status}"
         printf '{wildcards.sample}\t%s\t%s\t%s\t%s\n' "$mean_depth" "$coverage_fraction" "$passed" "$msg" >> "{output.status}"
+        printf '%.0f\n' "$mean_depth" > "{output.mean_depth}"
         '''
 
 
@@ -250,6 +252,7 @@ rule core_recall_consensus:
     input:
         diff_loci=rules.core_collect_diff_loci.output.diff_loci,
         call_done=rules.core_call_variants.output.done,
+        mean_depth=rules.core_depth_metrics.output.mean_depth,
     output:
         done=result_path("logs", "rules", "core_recall_consensus", "{sample}.done"),
     threads:
@@ -272,6 +275,7 @@ rule core_recall_consensus:
             {params.python_bin} -m {params.cli_module} recall \
                 --loci {input.diff_loci} \
                 --cns "$cns" \
+                --depth {input.mean_depth} \
                 --output "$recall" \
                 > {log} 2>&1
         else
