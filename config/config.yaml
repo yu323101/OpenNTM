@@ -1,5 +1,7 @@
-# Select TB_bowtie2 or NTM_bwamem. Use separate results_dir values per route.
-analysis_route: TB_bowtie2
+# Select TB_bwamem or NTM_bwamem. Both align with BWA-MEM; the routes differ
+# in trimming and variant-calling rules. TB_bowtie2 is a legacy alias of
+# TB_bwamem. Use separate results_dir values per route.
+analysis_route: TB_bwamem
 
 samplesheet: config/samplesheet.csv
 results_dir: results
@@ -8,11 +10,10 @@ cli_module: src.cli
 
 threads:
   trim_reads: 1
-  # bowtie2 + samtools_sort form one job (core_align_and_sort). With the
-  # SAM-to-sort streaming fix, throughput scales best with many parallel
-  # sample jobs at modest per-job threads: 8 + 2 threads x -j 24 ~= 240 CPUs.
-  bowtie2: 8
-  bwa: 8
+  # bwa + samtools_sort form one job (core_align_and_sort). Throughput scales
+  # best with many parallel sample jobs at modest per-job threads:
+  # 6 + 2 threads x 3 concurrent jobs ~= 24 CPUs.
+  bwa: 6
   samtools_sort: 2
   depth_metrics: 1
   call_variants: 1
@@ -69,14 +70,14 @@ references:
       label: tb.ancestor
       fasta: data/tb.ancestor.fasta
       fai: data/tb.ancestor.fasta.fai
-      bowtie2_index: data/bowtie2_index/tb.ancestor.fasta
+      bwa_index: data/bwa_index/tb.ancestor
       wildtype_fasta: data/tb.ancestor.fasta
       genome_length: 4411532
     tb_h37rv:
       label: H37Rv
       fasta: data/tb_h37rv.fasta
       fai: data/tb_h37rv.fasta.fai
-      bowtie2_index: data/bowtie2_index/tb_h37rv.fasta
+      bwa_index: data/bwa_index/tb_h37rv
       wildtype_fasta: data/tb_h37rv.fasta
       genome_length: 4411532
   ppe_list: data/PPE_INS_loci_Rv.list

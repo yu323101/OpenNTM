@@ -8,7 +8,6 @@ dependencies:
   - pip
   - sickle-trim
   - bwa
-  - bowtie2
   - samtools
   - varscan
   - fasttree

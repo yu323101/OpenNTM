@@ -15,16 +15,17 @@ REFERENCE_CFG = config.get("references", {})
 CLUSTERING_CFG = config.get("clustering", {})
 DRUG_RESISTANCE_CFG = config.get("drug_resistance", {})
 
-ANALYSIS_ROUTE = str(config.get("analysis_route", "TB_bowtie2"))
-if ANALYSIS_ROUTE not in {"TB_bowtie2", "NTM_bwamem"}:
-    raise WorkflowError("analysis_route must be TB_bowtie2 or NTM_bwamem")
+ANALYSIS_ROUTE = str(config.get("analysis_route", "TB_bwamem"))
+# TB_bowtie2 is kept as a legacy alias: both TB names now select the same
+# BWA-MEM alignment, and differ only in trimming and variant-calling rules.
+if ANALYSIS_ROUTE not in {"TB_bwamem", "TB_bowtie2", "NTM_bwamem"}:
+    raise WorkflowError("analysis_route must be TB_bwamem, TB_bowtie2 or NTM_bwamem")
 MAB_ROUTE = ANALYSIS_ROUTE == "NTM_bwamem"
 BWA_THREADS = int(THREADS_CFG.get("bwa", 8))
-ALIGN_THREADS = BWA_THREADS if MAB_ROUTE else int(THREADS_CFG.get("bowtie2", 4))
+ALIGN_THREADS = BWA_THREADS
 TRIM_MIN_LENGTH_ARG = "-l 35" if MAB_ROUTE else ""
 
 TRIM_READS_THREADS = int(THREADS_CFG.get("trim_reads", 1))
-BOWTIE2_THREADS = int(THREADS_CFG.get("bowtie2", 4))
 SAMTOOLS_SORT_THREADS = int(THREADS_CFG.get("samtools_sort", 2))
 DEPTH_METRICS_THREADS = int(THREADS_CFG.get("depth_metrics", 1))
 CALL_VARIANTS_THREADS = int(THREADS_CFG.get("call_variants", 1))
@@ -76,14 +77,6 @@ REFERENCE_FASTA_FAI = str(
         ACTIVE_REFERENCE_CFG.get(
             "fai",
             REFERENCE_CFG.get("h37rv_fai", f"{REFERENCE_FASTA}.fai"),
-        )
-    )
-)
-BOWTIE2_INDEX_PREFIX = str(
-    Path(
-        ACTIVE_REFERENCE_CFG.get(
-            "bowtie2_index",
-            REFERENCE_CFG.get("bowtie2_index", "data/bowtie2_index/tb.ancestor.fasta"),
         )
     )
 )

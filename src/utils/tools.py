@@ -23,7 +23,7 @@ class ToolInfo:
 class ToolManager:
     """Manage external bioinformatics tools."""
     
-    REQUIRED_TOOLS = ["sickle", "bowtie2", "samtools", "java"]
+    REQUIRED_TOOLS = ["sickle", "bwa", "samtools", "java"]
     OPTIONAL_TOOLS = ["fastp"]
     
     def __init__(self):
@@ -52,7 +52,7 @@ class ToolManager:
     def _get_version(self, tool: str, path: str) -> Optional[str]:
         """Get tool version."""
         version_flags = {
-            "bowtie2": "--version",
+            "bwa": "--version",
             "samtools": "--version",
             "java": "-version",
         }

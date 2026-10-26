@@ -4,12 +4,12 @@ OpenNTM 是基于 Snakemake 的分枝杆菌全基因组测序分析项目，支�
 
 ## 两条技术路线
 
-### TB：`TB_bowtie2`
+### TB：`TB_bwamem`（旧名 `TB_bowtie2`）
 
-沿用原 `pair_fixed_nostrandbias.py` 的主要分析逻辑，是当前默认路线。
+沿用原 `pair_fixed_nostrandbias.py` 的主要分析逻辑，是当前默认路线。比对统一使用 BWA-MEM，与 NTM 路线相同；两条路线的差异只在修剪参数和变异调用规则。
 
 ```text
-FASTQ → Sickle → Bowtie2 默认端到端比对 → samtools 排序
+FASTQ → Sickle → BWA-MEM（-c 100 -M，带样本 read group）→ BAM 合并、排序、索引
       → 深度/覆盖率门槛 → mpileup → VarScan
       → 双链支持筛选 → 参考屏蔽 → CNS / SNP → 核心 SNP / 距离
 ```
@@ -26,8 +26,8 @@ FASTQ → Sickle（最短 35 bp）→ BWA-MEM → BAM 合并、排序、索引
 
 | 设置 | TB 路线 | NTM 路线 |
 |---|---|---|
-| `analysis_route` | `TB_bowtie2` | `NTM_bwamem` |
-| 比对 | Bowtie2 默认端到端比对（`--end-to-end`，使用 `--sensitive` 预设） | BWA-MEM `-c 100 -M`，带样本 read group |
+| `analysis_route` | `TB_bwamem`（`TB_bowtie2` 为兼容别名） | `NTM_bwamem` |
+| 比对 | BWA-MEM `-c 100 -M`，带样本 read group | BWA-MEM `-c 100 -M`，带样本 read group |
 | Sickle | 默认长度参数 | `-l 35` |
 | 样本准入 | 取整平均深度 ≥10×、覆盖 ≥95%，可配置 | 记录覆盖情况，不应用 TB 准入门槛 |
 | mpileup | `-q 30 -Q 30 -B` | `-q 30 -Q 20 -B -O` |
@@ -43,7 +43,7 @@ FASTQ → Sickle（最短 35 bp）→ BWA-MEM → BAM 合并、排序、索引
 
 ## 安装与入口
 
-依赖包括 Sickle、Bowtie2、BWA、samtools、VarScan、Perl、snp-dists、Snakemake 和 Python。BWA 索引构建使用 `flock`，需要 util-linux。使用仓库中的 Conda 环境定义：
+依赖包括 Sickle、BWA、samtools、VarScan、Perl、snp-dists、Snakemake 和 Python。BWA 索引构建使用 `flock`，需要 util-linux。使用仓库中的 Conda 环境定义：
 
 ```bash
 conda env create -f environment.yml
@@ -104,7 +104,7 @@ NTM 核心分析：
 snakemake --configfile config/config.yaml config/ntm.yaml --cores 16 core_only
 ```
 
-正式运行前可加 `-n` 检查任务。`--cores` 是整个流程可用 CPU 总额；`threads.bowtie2`、`threads.bwa`、`threads.samtools_sort` 控制相应任务线程。`threads.distance` 控制 snp-dists 线程，默认 1。
+正式运行前可加 `-n` 检查任务。`--cores` 是整个流程可用 CPU 总额；`threads.bwa` 和 `threads.samtools_sort` 控制比对与排序线程（两者合起来是一个任务）。`threads.distance` 控制 snp-dists 线程，默认 1。
 
 | target | 内容 |
 |---|---|

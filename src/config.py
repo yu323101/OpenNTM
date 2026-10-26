@@ -23,7 +23,7 @@ class PipelineConfig(BaseModel):
     output_dir: Path = Field(default=Path("results"))
     
     # 线程配置
-    threads: int = Field(default=4, ge=1, description="Number of threads for bowtie2")
+    threads: int = Field(default=4, ge=1, description="Number of threads for bwa")
     sort_threads: int = Field(default=2, ge=1, description="Number of threads for samtools sort")
     
     # 阈值配置

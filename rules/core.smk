@@ -40,56 +40,23 @@ rule core_align_and_sort:
     log:
         result_path("logs", "rules", "core_align_and_sort", "{sample}.log"),
     params:
-        index_prefix=BOWTIE2_INDEX_PREFIX,
         ref_fasta=REFERENCE_FASTA,
         ref_fai=REFERENCE_FASTA_FAI,
-        bowtie_threads=ALIGN_THREADS,
         bwa_index=BWA_INDEX_PREFIX,
-        mab_route=int(MAB_ROUTE),
+        align_threads=ALIGN_THREADS,
         sort_threads=SAMTOOLS_SORT_THREADS,
     shell:
         r'''
         set -euo pipefail
         mkdir -p "$(dirname {log})" "$(dirname {output.bam})"
 
-        if [ "{params.mab_route}" = "1" ]; then
-            bash src/scripts/NTM_bwamem.sh align "{params.ref_fasta}" "{params.bwa_index}" \
-                "{input.r1_trim}" "{input.r2_trim}" "{input.s_trim}" "{output.bam}" \
-                "{wildcards.sample}" {params.bowtie_threads} {params.sort_threads} >> {log} 2>&1
-        else
-        missing_index=0
-        for suf in 1 2 3 4 rev.1 rev.2; do
-            if [ ! -f "{params.index_prefix}.${{suf}}.bt2" ]; then
-                missing_index=1
-                break
-            fi
-        done
-        if [ "$missing_index" -eq 1 ]; then
-            echo "Bowtie2 index missing for {params.index_prefix}, building now..." >> {log}
-            mkdir -p "$(dirname "{params.index_prefix}")"
-            if ! command -v bowtie2-build >/dev/null 2>&1; then
-                echo "Missing bowtie2-build in PATH" >> {log}
-                exit 1
-            fi
-            bowtie2-build "{params.ref_fasta}" "{params.index_prefix}" >> {log} 2>&1
-        fi
-
         if [ ! -f "{params.ref_fai}" ]; then
             samtools faidx "{params.ref_fasta}" >> {log} 2>&1
         fi
 
-        # Stream bowtie2 output straight into samtools sort to avoid
-        # writing a multi-GB intermediate SAM file to disk.
-        bowtie2 -p {params.bowtie_threads} \
-            -x {params.index_prefix} \
-            -1 "{input.r1_trim}" \
-            -2 "{input.r2_trim}" \
-            -U "{input.s_trim}" \
-            2>> {log} \
-        | samtools sort -@ {params.sort_threads} -m 4G -o "{output.bam}" - 2>> {log}
-
-        samtools flagstat "{output.bam}" >> {log} 2>&1
-        fi
+        bash src/scripts/NTM_bwamem.sh align "{params.ref_fasta}" "{params.bwa_index}" \
+            "{input.r1_trim}" "{input.r2_trim}" "{input.s_trim}" "{output.bam}" \
+            "{wildcards.sample}" {params.align_threads} {params.sort_threads} >> {log} 2>&1
         '''
 
 

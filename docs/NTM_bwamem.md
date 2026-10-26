@@ -1,6 +1,6 @@
 # NTM BWA-MEM route
 
-Set `analysis_route: NTM_bwamem` in a configuration overlay. The default remains `TB_bowtie2`.
+Set `analysis_route: NTM_bwamem` in a configuration overlay. The default remains `TB_bwamem`; both routes align with BWA-MEM and differ only in trimming and variant-calling rules.
 Use a separate `results_dir` for each route to avoid reusing outputs from another route.
 
 Configure an active reference profile with `fasta`, `fai`, `bwa_index`, `wildtype_fasta`,
