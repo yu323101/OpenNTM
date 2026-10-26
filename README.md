@@ -106,6 +106,32 @@ snakemake --configfile config/config.yaml config/ntm.yaml --cores 16 core_only
 
 正式运行前可加 `-n` 检查任务。`--cores` 是整个流程可用 CPU 总额；`threads.bowtie2`、`threads.bwa`、`threads.samtools_sort` 控制相应任务线程。`threads.distance` 控制 snp-dists 线程，默认 1。
 
+### 大批量样本：分批提交
+
+`temp()` 只决定中间文件何时删除，不限制它在磁盘上积累多少。当前处理快（剪切，单线程）、消费慢（比对，多线程）时，前处理会大幅超前于比对，几千株样本的临时 FASTQ 可能堆积到数百 GB。
+
+`scripts/run_batches.py` 不修改任何 rule，只把样本分成小批依次提交，给在途中间文件设一个上限：
+
+```bash
+python scripts/run_batches.py \
+  --samplesheet /abs/samples.csv \
+  --results-dir /abs/results \
+  --configfile config/config.yaml \
+  --batch-size 9 --cores 24 \
+  --prefer-input 'samples/{sample}/alignment_qc/{sample}_1.fastq' \
+  --cleanup 'samples/{sample}/alignment_qc/{sample}_1.fastq' \
+  --cleanup 'samples/{sample}/alignment_qc/{sample}_2.fastq' \
+  --cleanup 'samples/{sample}/alignment_qc/{sample}_s.fastq'
+```
+
+- `--target` 默认是每株的变异调用完成标记 `logs/rules/core_call_variants/{sample}.done`
+- `--prefer-input` 让已有剪切结果的样本优先提交，先消费已有中间文件
+- `--cleanup` 在每批成功后删除该批已消费的中间文件（可选，Snakemake 自身也会删除）
+- 批大小建议取「核数 ÷ 每株线程数」的 2–3 倍，例如 24 核、每株 8 线程用 9 株
+- `--max-batches N` 只跑前 N 批，`--dry-run` 只预演第一批
+
+全部批次完成后，再执行一次完整 `core_only` 生成核心 SNP 与距离矩阵；已完成的每株任务会被跳过。
+
 | target | 内容 |
 |---|---|
 | `foundation_only` | FASTQ 基础 QC 输入 |
