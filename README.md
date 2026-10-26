@@ -129,6 +129,8 @@ python scripts/run_batches.py \
 - `--cleanup` 在每批成功后删除该批已消费的中间文件（可选，Snakemake 自身也会删除）
 - 批大小建议取「核数 ÷ 每株线程数」的 2–3 倍，例如 24 核、每株 8 线程用 9 株
 - `--max-batches N` 只跑前 N 批，`--dry-run` 只预演第一批
+- `--continue-on-error`：某株失败时写入 `<results-dir>/failed_samples.txt` 并继续下一批（整批全失败才停止），适合无人值守的长任务
+- `--skip-file`：跳过名单路径，默认 `<results-dir>/failed_samples.txt`，重启时自动跳过已记录的失败样本
 
 全部批次完成后，再执行一次完整 `core_only` 生成核心 SNP 与距离矩阵；已完成的每株任务会被跳过。
 

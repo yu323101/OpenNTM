@@ -62,6 +62,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-batches", type=int, default=0, help="Stop after this many batches (0 = all)"
     )
+    parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help=(
+            "Keep going after a failed batch: failed samples are appended to --skip-file "
+            "and skipped on later runs. Stops if every sample in a batch fails."
+        ),
+    )
+    parser.add_argument(
+        "--skip-file",
+        type=Path,
+        default=None,
+        help="Samples to skip, one per line (default: <results-dir>/failed_samples.txt)",
+    )
     parser.add_argument("--snakemake", default="snakemake", help="Snakemake executable")
     parser.add_argument("--log", type=Path, default=None, help="Log file (default: <results-dir>/logs/run_batches.log)")
     parser.add_argument("--dry-run", action="store_true", help="Dry-run the first batch and exit")
@@ -75,6 +89,19 @@ def read_samples(sheet: Path, column: str) -> list:
 
 def resolve(results_dir: Path, template: str, sample: str) -> Path:
     return results_dir / template.format(sample=sample)
+
+
+def load_skip(path: Path) -> set:
+    """One sample ID per line; missing file means nothing to skip."""
+    if not path.exists():
+        return set()
+    return {line.strip() for line in path.read_text().splitlines() if line.strip()}
+
+
+def record_failures(path: Path, samples) -> None:
+    with path.open("a") as handle:
+        for sample in samples:
+            handle.write(sample + "\n")
 
 
 def order_samples(samples, results_dir: Path, target_template: str, prefer_template=None) -> list:
@@ -93,6 +120,7 @@ def main() -> int:
         print("--batch-size must be at least 1", file=sys.stderr)
         return 2
 
+    args.skip_file = args.skip_file or args.results_dir / "failed_samples.txt"
     log_path = args.log or args.results_dir / "logs" / "run_batches.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -103,7 +131,10 @@ def main() -> int:
             handle.write(line + "\n")
 
     samples = read_samples(args.samplesheet, args.sample_column)
-    order = order_samples(samples, args.results_dir, args.target, args.prefer_input)
+    skip = load_skip(args.skip_file)
+    order = order_samples(
+        [s for s in samples if s not in skip], args.results_dir, args.target, args.prefer_input
+    )
     total_batches = (len(order) + args.batch_size - 1) // args.batch_size
     log(
         f"pending {len(order)}/{len(samples)} samples, batch size {args.batch_size}"
@@ -120,7 +151,7 @@ def main() -> int:
         command = [args.snakemake]
         for config in args.configfile:
             command += ["--configfile", config]
-        command += ["--cores", str(args.cores), "--rerun-incomplete"]
+        command += ["--cores", str(args.cores), "--rerun-incomplete", "--keep-going"]
         if args.dry_run:
             command.append("-n")
         command += [str(resolve(args.results_dir, args.target, sample)) for sample in batch]
@@ -128,8 +159,21 @@ def main() -> int:
         log(f"batch {index}/{total_batches}: {len(batch)} samples")
         code = subprocess.run(command).returncode
         if code != 0:
-            log(f"batch failed with exit code {code}; no further batches submitted")
-            return code
+            if not args.continue_on_error:
+                log(f"batch failed with exit code {code}; no further batches submitted")
+                return code
+            missing = [
+                s for s in batch if not resolve(args.results_dir, args.target, s).exists()
+            ]
+            record_failures(args.skip_file, missing)
+            log(
+                f"batch {index} failed with exit code {code}; recorded {len(missing)} "
+                f"failed sample(s) in {args.skip_file.name} and continuing"
+            )
+            if len(missing) == len(batch):
+                log("every sample in the batch failed; stopping in case it is systematic")
+                return code
+            continue
         if args.dry_run:
             log("dry-run finished")
             return 0
