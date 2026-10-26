@@ -12,6 +12,7 @@ def filter_fasta(
     fasta_file: Path,
     threshold: int,
     output_prefix: str,
+    reference_name: str = "H37Rv",
 ) -> None:
     """
     Filter FASTA alignment based on wild-type loci and missing data.
@@ -146,8 +147,9 @@ def filter_fasta(
             
             f.write('\n')
         
-        # Write H37Rv reference sequence (wild-type bases)
-        f.write(">H37Rv\n")
+        # Write the reference sequence (wild-type bases), labelled with the
+        # name of the reference actually used for variant calling.
+        f.write(f">{reference_name}\n")
         for k in range(min(seq_length, num_loci)):
             if out.get(k, 0) == 1 and k in typen:
                 if k in wd:
@@ -170,7 +172,13 @@ def filter_fasta_cmd(
     fasta: Path = Option(..., "--fasta", "-f", help="Input FASTA file"),
     threshold: int = Option(5, "--threshold", "-t", help="Missing data threshold (%)"),
     output_prefix: str = Option("filtered", "--output-prefix", "-o", help="Output file prefix"),
+    reference_name: str = Option(
+        "H37Rv",
+        "--reference-name",
+        "-r",
+        help="Name for the reference sequence row; must match the active reference",
+    ),
 ) -> None:
     """Filter FASTA alignment based on wild-type loci (replaces 2nd_loci_filt_fa_bak.pl)."""
-    filter_fasta(wild_loci, fasta, threshold, output_prefix)
+    filter_fasta(wild_loci, fasta, threshold, output_prefix, reference_name)
     typer.echo(f"FASTA filtering completed!")

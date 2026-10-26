@@ -76,6 +76,7 @@ references:
   active: ntm
   profiles:
     ntm:
+      label: NTM_reference
       fasta: /abs/path/reference.fna
       fai: /abs/path/reference.fna.fai
       bwa_index: /abs/path/bwa_index/reference
@@ -85,6 +86,8 @@ references:
 ```
 
 每条路线、每个参考和不同参数的分析使用独立 `results_dir`，避免复用旧结果。屏蔽文件是每行一个参考坐标的位置列表。NTM 路线要求在活动 reference profile 中显式提供 `ppe_list`。
+
+`label` 决定核心 SNP alignment 与距离矩阵中参考行的名称，默认取 profile 名。TB 默认 profile 为 `tb_ancestor`（祖先基因组），因此参考行写作 `tb.ancestor`；切换到 `tb_h37rv` 时写作 `H37Rv`。
 
 ## 运行
 

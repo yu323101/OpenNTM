@@ -35,6 +35,7 @@ env/
 # 测试相关（保留代码，忽略输出）
 tests/*
 !tests/test_mab_route.py
+!tests/test_reference_label.py
 tests/__pycache__/
 tests/*.pyc
 .pytest_cache/

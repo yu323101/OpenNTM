@@ -18,6 +18,7 @@ def filter_core_snp(
     alignment_file: Path,
     threshold: int,
     output_prefix: str,
+    reference_name: str = "H37Rv",
 ) -> None:
     """
     Filter core SNP alignment based on missing/mixed ratio and polymorphism.
@@ -28,7 +29,7 @@ def filter_core_snp(
     3. Calculate missing/mixed ratio for each position
     4. Identify polymorphic positions
     5. Filter positions: missing/mixed < threshold AND polymorphic
-    6. Output filtered alignment with H37Rv appended
+    6. Output filtered alignment with the reference appended
     """
     # Step 1: Read wild-type bases
     logger.info(
@@ -151,12 +152,13 @@ def filter_core_snp(
             )
             f_fa.write(f"{filtered_seq}\n")
 
-        # Output H37Rv (wild-type bases)
-        f_fa.write(">H37Rv\n")
-        h37rv_seq = "".join(
+        # Output reference row (wild-type bases). The name must match the
+        # reference the calls were made against, not a fixed H37Rv label.
+        f_fa.write(f">{reference_name}\n")
+        reference_seq = "".join(
             wild_bases[idx] for idx in range(num_loci) if keep.get(idx, False)
         )
-        f_fa.write(f"{h37rv_seq}\n")
+        f_fa.write(f"{reference_seq}\n")
 
         # Output coordinates
         for idx in range(num_loci):
@@ -175,8 +177,14 @@ def filter_cmd(
     output_prefix: str = Option(
         "all_strains", "--output-prefix", "-o", help="Output file prefix"
     ),
+    reference_name: str = Option(
+        "H37Rv",
+        "--reference-name",
+        "-r",
+        help="Name for the reference sequence row; must match the active reference",
+    ),
 ) -> None:
     """Filter core SNP alignment."""
-    filter_core_snp(wild_loci, alignment, threshold, output_prefix)
+    filter_core_snp(wild_loci, alignment, threshold, output_prefix, reference_name)
     logger.info("Core SNP filtering completed: %s.fadel-InvMisF%s.bak.fa", output_prefix, threshold)
     typer.echo("Core SNP filtering completed!")

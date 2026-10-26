@@ -56,6 +56,10 @@ ACTIVE_REFERENCE_CFG = (
     if isinstance(REFERENCE_PROFILES, dict)
     else {}
 )
+# Name written on the reference row of the core SNP alignment. Must follow the
+# active reference, otherwise the row is mislabelled (e.g. ancestor calls
+# reported as H37Rv).
+REFERENCE_LABEL = str(ACTIVE_REFERENCE_CFG.get("label", REFERENCE_PROFILE))
 
 # New profile-style config (references.active + references.profiles.*) is preferred.
 # Keep backward compatibility with old keys (h37rv/h37rv_fai/bowtie2_index/ancestor_fasta).

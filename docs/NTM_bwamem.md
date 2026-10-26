@@ -18,6 +18,7 @@ references:
   active: ntm
   profiles:
     ntm:
+      label: NTM_reference
       fasta: /path/to/reference.fna
       fai: /path/to/reference.fna.fai
       bwa_index: /path/to/bwa_index/reference
