@@ -65,12 +65,15 @@ references:
   active: tb_ancestor
   profiles:
     tb_ancestor:
+      # Name written on the reference row of the core SNP alignment.
+      label: tb.ancestor
       fasta: data/tb.ancestor.fasta
       fai: data/tb.ancestor.fasta.fai
       bowtie2_index: data/bowtie2_index/tb.ancestor.fasta
       wildtype_fasta: data/tb.ancestor.fasta
       genome_length: 4411532
     tb_h37rv:
+      label: H37Rv
       fasta: data/tb_h37rv.fasta
       fai: data/tb_h37rv.fasta.fai
       bowtie2_index: data/bowtie2_index/tb_h37rv.fasta

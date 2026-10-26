@@ -348,6 +348,7 @@ rule core_filter_alignment:
         python_bin=PYTHON_BIN,
         cli_module=CLI_MODULE,
         output_prefix=result_path(".core_work", "core_snps"),
+        reference_name=REFERENCE_LABEL,
     shell:
         r'''
         set -euo pipefail
@@ -357,6 +358,7 @@ rule core_filter_alignment:
             --alignment {input.merged} \
             --threshold 5 \
             --output-prefix {params.output_prefix} \
+            --reference-name {params.reference_name} \
             > {log} 2>&1
         '''
 
